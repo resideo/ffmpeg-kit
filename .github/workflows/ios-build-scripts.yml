@@ -1,10 +1,12 @@
 name: ios build scripts
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - development
       - main
+      - custom-builds
     paths:
       - '.github/workflows/ios-build-scripts.yml'
       - 'apple/**'
@@ -50,6 +52,14 @@ jobs:
       - name: print ffbuild logs
         if: ${{ failure() }}
         run: '[[ -f ./src/ffmpeg/ffbuild/config.log ]] && tail -50 ./src/ffmpeg/ffbuild/config.log'
+      - name: Upload XCFramework Artifacts
+        if: ${{ matrix.xcode == '14.0.1' && github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: ios-xcframework
+          path: prebuilt/bundle-apple-xcframework-ios/
+          retention-days: 1
+          
   build-main-on-macos-bigsur:
     name: ios main on big sur
     runs-on: macos-11
@@ -73,6 +83,7 @@ jobs:
       - name: print ffbuild logs
         if: ${{ failure() }}
         run: '[[ -f ./src/ffmpeg/ffbuild/config.log ]] && tail -50 ./src/ffmpeg/ffbuild/config.log'
+        
   build-lts-on-macos-bigsur:
     name: ios lts on big sur
     runs-on: macos-11
@@ -96,3 +107,72 @@ jobs:
       - name: print ffbuild logs
         if: ${{ failure() }}
         run: '[[ -f ./src/ffmpeg/ffbuild/config.log ]] && tail -50 ./src/ffmpeg/ffbuild/config.log'
+      - name: Upload LTS Framework Artifacts
+        if: ${{ matrix.xcode == '12.4' && github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: ios-framework-lts
+          path: prebuilt/bundle-apple-framework-ios-lts/
+          retention-days: 1
+
+  create-flutter-release:
+    name: Create Flutter Release
+    needs: [build-main-on-macos-monterey, build-lts-on-macos-bigsur]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Download XCFramework artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: ios-xcframework
+          path: ios-xcframework
+      
+      - name: Download LTS Framework artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: ios-framework-lts
+          path: ios-framework-lts
+      
+      - name: Prepare Flutter release package
+        run: |
+          mkdir -p flutter-package/ios
+          cp -r ios-xcframework/* flutter-package/ios/
+          cp -r ios-framework-lts/* flutter-package/ios/
+          
+          # Copy flutter platform files
+          cp -r flutter flutter-package/
+          
+          cd flutter-package
+          zip -r ../ffmpeg-kit-flutter-ios.zip .
+      
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(cat flutter/flutter/pubspec.yaml | grep "version:" | head -n 1 | awk '{print $2}' | tr -d ' ')
+          echo "::set-output name=version::$VERSION"
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ffmpeg-kit-flutter-ios.zip
+          tag_name: flutter.v${{ steps.get_version.outputs.version }}
+          name: Flutter v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+            ## FFmpegKit Flutter Release v${{ steps.get_version.outputs.version }}
+            
+            This release contains the iOS libraries for the FFmpegKit Flutter package.
+            
+            ### Installation
+            
+            ```yaml
+            dependencies:
+              ffmpeg_kit_flutter: ${{ steps.get_version.outputs.version }}
+            ```
+            
+            For more information, see the [Flutter documentation](https://github.com/arthenica/ffmpeg-kit/tree/main/flutter/flutter).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
