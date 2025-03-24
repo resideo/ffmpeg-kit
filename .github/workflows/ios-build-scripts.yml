@@ -6,7 +6,7 @@ on:
     branches:
       - development
       - main
-      - custom-builds
+      - 'build-v*'
     paths:
       - '.github/workflows/ios-build-scripts.yml'
       - 'apple/**'
