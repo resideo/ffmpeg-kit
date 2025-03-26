@@ -11,14 +11,9 @@ environment:
 
 flutter:
   plugin:
-    platforms:
-      android:
-        package: com.arthenica.ffmpegkit.flutter
-        pluginClass: FFmpegKitFlutterPlugin
+    platforms:      
       ios:
-        pluginClass: FFmpegKitFlutterPlugin
-      macos:
-        pluginClass: FFmpegKitFlutterPlugin
+        pluginClass: FFmpegKitFlutterPlugin      
 
 dependencies:
   ffmpeg_kit_flutter_platform_interface: ^0.2.1
